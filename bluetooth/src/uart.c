@@ -82,7 +82,7 @@ BOOL UART_bPutTxChar(UI08 u8TxChar)
 
 	/** write one byte */
 	u8Counter = write(fd,&u8TxChar,sizeof(u8TxChar));
-	printf("Byte sent:%2.2x\n",u8TxChar);
+	//printf("Byte sent:%2.2x\n",u8TxChar);
 	if(u8Counter == 1)
     {
     	/** error */
