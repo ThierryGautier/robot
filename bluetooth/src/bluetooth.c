@@ -78,36 +78,52 @@ int main (int argc, char *argv[])
 				printf("%2.2x ",au8RxFrame[i]);
 			}
 #else
-			ConvertBytes.au8Data[0] = au8RxFrame[6];
+	        /*update life byte*/
+			printf("Tx Life byte:%2.2x ",au8RxFrame[0]);
+			printf("Rx Life byte:%2.2x ",au8RxFrame[1]);
+
+		    /* update linear acceleration (g) X */
+			ConvertBytes.au8Data[0] = au8RxFrame[2];
+			ConvertBytes.au8Data[1] = au8RxFrame[3];
+			ConvertBytes.au8Data[2] = au8RxFrame[4];
+     		ConvertBytes.au8Data[3] = au8RxFrame[5];
+     		printf("Gx:%10.6f ",ConvertBytes.f32Value);
+
+     		/* update linear acceleration (g) Y */
+     		ConvertBytes.au8Data[0] = au8RxFrame[6];
 			ConvertBytes.au8Data[1] = au8RxFrame[7];
 			ConvertBytes.au8Data[2] = au8RxFrame[8];
      		ConvertBytes.au8Data[3] = au8RxFrame[9];
-     		printf("filterGx:%10.6f ",ConvertBytes.f32Value);
-			ConvertBytes.au8Data[0] = au8RxFrame[10];
+     		printf("Gy:%10.6f ",ConvertBytes.f32Value);
+
+     		/* update linear acceleration (g) Z */
+     		ConvertBytes.au8Data[0] = au8RxFrame[10];
 			ConvertBytes.au8Data[1] = au8RxFrame[11];
 			ConvertBytes.au8Data[2] = au8RxFrame[12];
      		ConvertBytes.au8Data[3] = au8RxFrame[13];
-     		printf("filterGy:%10.6f ",ConvertBytes.f32Value);
+     		printf("Gz:%10.6f ",ConvertBytes.f32Value);
+
+     		/* update roll (deg) */
 			ConvertBytes.au8Data[0] = au8RxFrame[14];
 			ConvertBytes.au8Data[1] = au8RxFrame[15];
 			ConvertBytes.au8Data[2] = au8RxFrame[16];
      		ConvertBytes.au8Data[3] = au8RxFrame[17];
-     		printf("filterGz:%10.6f ",ConvertBytes.f32Value);
-			ConvertBytes.au8Data[0] = au8RxFrame[18];
+     		printf("Roll:%10.6f° ",ConvertBytes.f32Value);
+
+     		/* update pitch (deg) */
+     		ConvertBytes.au8Data[0] = au8RxFrame[18];
 			ConvertBytes.au8Data[1] = au8RxFrame[19];
 			ConvertBytes.au8Data[2] = au8RxFrame[20];
      		ConvertBytes.au8Data[3] = au8RxFrame[21];
-     		printf("Gx:%10.6f ",ConvertBytes.f32Value);
+     		printf("Pitch:%10.6f° ",ConvertBytes.f32Value);
+
+     		/* update compass (deg) */
 			ConvertBytes.au8Data[0] = au8RxFrame[22];
 			ConvertBytes.au8Data[1] = au8RxFrame[23];
 			ConvertBytes.au8Data[2] = au8RxFrame[24];
      		ConvertBytes.au8Data[3] = au8RxFrame[25];
-     		printf("Vx:%10.6f ",ConvertBytes.f32Value);
-			ConvertBytes.au8Data[0] = au8RxFrame[26];
-			ConvertBytes.au8Data[1] = au8RxFrame[27];
-			ConvertBytes.au8Data[2] = au8RxFrame[28];
-     		ConvertBytes.au8Data[3] = au8RxFrame[29];
-     		printf("Px:%10.6f ",ConvertBytes.f32Value);
+     		printf("Compass:%10.6f°",ConvertBytes.f32Value);
+
 #endif
      		printf("\n");
 			//send hdlc response motor command
