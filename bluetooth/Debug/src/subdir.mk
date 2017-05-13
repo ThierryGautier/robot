@@ -6,16 +6,22 @@
 C_SRCS += \
 ../src/bluetooth.c \
 ../src/hdlc.c \
+../src/joystick.c \
+../src/keyboard.c \
 ../src/uart.c 
 
 OBJS += \
 ./src/bluetooth.o \
 ./src/hdlc.o \
+./src/joystick.o \
+./src/keyboard.o \
 ./src/uart.o 
 
 C_DEPS += \
 ./src/bluetooth.d \
 ./src/hdlc.d \
+./src/joystick.d \
+./src/keyboard.d \
 ./src/uart.d 
 
 

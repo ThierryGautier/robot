@@ -11,5 +11,8 @@ typedef unsigned char  UI08;
 typedef unsigned short UI16;
 typedef unsigned long  UI32;
 
+typedef signed char  SI08;
+typedef signed short SI16;
+typedef signed long  SI32;
 
 #endif /* STDTYPE_H_ */
