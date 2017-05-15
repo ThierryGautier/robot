@@ -1,3 +1,0 @@
-Scanning ...
-	EC:FE:7E:13:CA:FE	BlueRadios13CAFE
-	B6:08:AA:C6:46:4E	ARCHOS 101 XS 2
