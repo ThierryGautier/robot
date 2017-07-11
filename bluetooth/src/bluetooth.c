@@ -1,7 +1,7 @@
 /*
  ============================================================================
  Name        : bluetooth.c
- Author      : 
+ Author      :
  Version     :
  Copyright   : Your copyright notice
  Description : communication with FRDM KV31 board through a bluetooth connection
@@ -49,6 +49,7 @@ void* ThreadCOM(void *arg)
 {
 	static BOOL bInitHDLCIsOK;
 	static BOOL bIsTheFirstRxFrame = TRUE;
+	BOOL bTxfirstResult;
 
 	printf("arg:%s ",(char *)arg);
 
@@ -59,14 +60,26 @@ void* ThreadCOM(void *arg)
 									 UART_bPutTxChar,
 									 UART_bCloseDevice);
 
-    /* hdlc communication loop */
+
+	au8TxFrame[0] = 's';
+	u8TxSize = 1;
+	//send tx frame
+	bTxfirstResult = HDLC_bPutFrame(&au8TxFrame[0], &u8TxSize);
+	if(bTxfirstResult!=TRUE)
+	{
+		printf("Error to put a frame\n");
+	}
+
+	/* hdlc communication loop */
 	while ( bInitHDLCIsOK==TRUE )
 	{
 		BOOL bRxResult;
 		BOOL bTxResult;
+
 #ifdef LOG_BUFFER_HDLC
 		UI16 i;
 #endif
+
 		//wait read a frame
 		bRxResult = HDLC_bGetFrame(au8RxFrame, &u8RxSize);
 		if(bRxResult == TRUE)
