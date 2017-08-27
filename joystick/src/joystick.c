@@ -34,7 +34,9 @@ __s16 s16Left2ButtonY;
 
 typedef void (*pfGamePadActionFunction)(__u8 u8Number, __s16 s16Value);
 
-
+/*
+ * List of all functions called when a gamepad button changed his state
+ */
 void ActionButton0(__u8 u8Number, __s16 s16Value)
 {
     printf("Boutton A\n");
@@ -135,6 +137,9 @@ void ActionButton19(__u8 u8Number, __s16 s16Value)
 
 }
 
+/*
+ * List of all functions called when a gamepad axis changed his state
+ */
 void ActionAxis0(__u8 u8Number, __s16 s16Value)
 {
     s16LeftJoystickPositionX = s16Value;
@@ -217,7 +222,11 @@ pfGamePadActionFunction pfGamePadAxisActionArray[8] =
 	ActionAxis6,
 	ActionAxis7
 };
-
+/* processus in charge to:
+ * - wait the detect the first gamepad connected
+ * - read gamepad description (name, number of buttons, numbers of axis..)
+ * - in the infinite loop, the software call a user function for each game pad events
+ */
 int main()
 {
     int joy_fd;
@@ -254,7 +263,7 @@ int main()
     axis = (int *) calloc( num_of_axis, sizeof( int ) );
     button = (char *) calloc( num_of_buttons, sizeof( char ) );
 
-    //fcntl( joy_fd, F_SETFL, O_NONBLOCK );   /* use non-blocking mode */
+    //fcntl( joy_fd, F_SETFL, O_NONBLOCK );   /* use non-blocking mode: code in comment to used blocking mode (reduce CPU usage) */
 
     while( 1 )      /* infinite loop */
     {
@@ -273,20 +282,23 @@ int main()
         printf("Event=number:%2.2x, time:%d, type:%2.2x, value:%d \n",js.number,js.time,js.type,js.value);
         fflush(stdout);
 
+        /*init state of each input from gamepad */
         if((js.type & JS_EVENT_INIT)==JS_EVENT_INIT)
         {
-		    /*init state of each input from gamepad */
-            /* see what to do with the event */
+		     /* see what to do with the event */
             switch (js.type & ~JS_EVENT_INIT)
             {
                 case JS_EVENT_AXIS:
                     axis   [ js.number ] = js.value;
+                    pfGamePadAxisActionArray[ js.number ](js.number,js.value);
                     break;
                 case JS_EVENT_BUTTON:
                     button [ js.number ] = js.value;
+                    pfGamePadButtonActionArray[ js.number ](js.number,js.value);
                     break;
             }
         }
+        /* gamepad event of one input from gamepad */
         else
         {
             /* see what to do with the event */
@@ -303,6 +315,6 @@ int main()
             }
         }
     }
-    close( joy_fd );        /* too bad we never get here */
+    close( joy_fd );
     return 0;
 }
