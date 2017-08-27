@@ -178,14 +178,14 @@ void ActionAxis5(__u8 u8Number, __s16 s16Value)
 
 void ActionAxis6(__u8 u8Number, __s16 s16Value)
 {
-    s16RightJoystickPositionX = s16Value;
-    printf("Right joystick x:%d y:%d\n",s16LeftDirectionalButtonX,s16LeftDirectionalButtonY);
+	s16LeftDirectionalButtonX = s16Value;
+    printf("Left directional button x:%d y:%d\n",s16LeftDirectionalButtonX,s16LeftDirectionalButtonY);
 }
 
 void ActionAxis7(__u8 u8Number, __s16 s16Value)
 {
-    s16RightJoystickPositionY = s16Value;
-    printf("Right joystick x:%d y:%d\n",s16LeftDirectionalButtonX,s16LeftDirectionalButtonY);
+	s16LeftDirectionalButtonY = -s16Value;
+    printf("Left directional button x:%d y:%d\n",s16LeftDirectionalButtonX,s16LeftDirectionalButtonY);
 }
 
 pfGamePadActionFunction pfGamePadButtonActionArray[19] =
@@ -242,7 +242,7 @@ int main()
     while( ( joy_fd = open( JOY_DEV , O_RDONLY)) == -1 )
     {
         printf( "Couldn't open joystick\n" );
-        sleep(50);
+        sleep(2);/* wait 2 s*/
     }
 
     /* read gamepad description */
