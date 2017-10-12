@@ -27,10 +27,20 @@
 
 #define GAMEPAD_LOG ///used to log all gamepad events
 
-#define JOY_DEV "/dev/input/js1"
+#define GAMEPAD_DEV "/dev/input/js1"
 
 #define FIFO_FILE "/tmp/MotionControl.fifo" //FIFO used to exchange motion command
 #define FIFO_CMD  "/tmp/VoiceControl.fifo" //FIFO used to exchange sound command
+
+/* time min between two motion control command
+   gamepad is able to generate an event at 10 ms
+   but the communication HDLC between hikey and FRDMKV31 is no able to manage this frequency of events */
+#define U32_TIME_MIN_BETWEEN_TWO_MOTION_CONTROL_CMD_IN_1MS 50U
+
+/* time min between two voice command
+   gamepad is able to generate an event at 10 ms
+   but it' stupid to send voice command every 10 ms so the software limit it at 1 s  */
+#define U32_TIME_MIN_BETWEEN_TWO_VOICE_CONTROL_CMD_IN_1MS 1000U
 
 typedef struct
 {
@@ -57,55 +67,74 @@ SI16 s16Right2ButtonX;
 SI16 s16Left2ButtonY;
 
 stMotionCommand gstMotionCommand = {0,0,0.0f};
+UI32 u32PreviousTimeOfMotionCommandIn_us = 0;
+UI32 u32PreviousTimeOfVoiceCommandIn_us = 0;
 
-typedef void (*pfGamePadActionFunction)(__u8 u8Number, SI16 s16Value);
+typedef void (*pfGamePadActionFunction)(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value);
 
 /*
  * function used to send motion command through pipe
  */
-static void SendMotionCommandThroughFIFO(stMotionCommand* lstMotionCmd)
+static void SendMotionCommandThroughFIFO(UI32 u32TimeOfGamepadEventIn_us, stMotionCommand* lstMotionCmd)
 {
     FILE *pFileFIFIO;
-#ifdef GAMEPAD_LOG
-    printf("gamepad - u8MotorCommand:%d u16PWMLevel:%d f32DeltaCompass:%f\n",
-           lstMotionCmd->u8MotorCommand,
-           lstMotionCmd->u16PWMLevel,
-           lstMotionCmd->f32DeltaCompass);
-#endif
-    // open FIFO
-    if((pFileFIFIO = fopen(FIFO_FILE, "w")) == NULL) {
-        perror("gamepad:fopen FIFO_FILE");
-        exit(1);
-     }
-    // send the motion cmd
-    fwrite(lstMotionCmd,sizeof(stMotionCommand),1, pFileFIFIO);
 
-    // close the FIFO
-    fclose(pFileFIFIO);
+   /* limit the number of motion command 1000 ms /U32_TIME_MIN_BETWEEN_TWO_MOTION_CONTROL_CMD_IN_1MS per second */
+    if(((u32TimeOfGamepadEventIn_us - u32PreviousTimeOfMotionCommandIn_us) >= U32_TIME_MIN_BETWEEN_TWO_MOTION_CONTROL_CMD_IN_1MS) ||
+       (lstMotionCmd->u16PWMLevel == 0)
+      )
+    {
+        u32PreviousTimeOfMotionCommandIn_us = u32TimeOfGamepadEventIn_us;
+
+#ifdef GAMEPAD_LOG
+        printf("gamepad -time:%u u8MotorCommand:%d u16PWMLevel:%d f32DeltaCompass:%f\n",
+               u32TimeOfGamepadEventIn_us,
+               lstMotionCmd->u8MotorCommand,
+               lstMotionCmd->u16PWMLevel,
+               lstMotionCmd->f32DeltaCompass);
+#endif
+        // open FIFO
+        if((pFileFIFIO = fopen(FIFO_FILE, "w")) == NULL) {
+            perror("gamepad:fopen FIFO_FILE");
+            exit(1);
+         }
+        // send the motion cmd
+        fwrite(lstMotionCmd,sizeof(stMotionCommand),1, pFileFIFIO);
+
+        // close the FIFO
+        fclose(pFileFIFIO);
+    }
 }
 
 /*
  * function used to send espeak command through pipe
  */
-static void SendEspeakCommandThroughFIFO(stEspeakCommand* lstEspeakCmd)
+static void SendEspeakCommandThroughFIFO(UI32 u32TimeOfGamepadEventIn_us, stEspeakCommand* lstEspeakCmd)
 {
     FILE *pFileFIFIO;
+
+   /* limit the number of voice command 1000 ms /U32_TIME_MIN_BETWEEN_TWO_VOICE_CONTROL_CMD_IN_1MS per second */
+    if((u32TimeOfGamepadEventIn_us - u32PreviousTimeOfVoiceCommandIn_us) >= U32_TIME_MIN_BETWEEN_TWO_VOICE_CONTROL_CMD_IN_1MS)
+    {
+        u32PreviousTimeOfVoiceCommandIn_us = u32TimeOfGamepadEventIn_us;
+
 #ifdef GAMEPAD_LOG
-    printf("gamepad - Espeak Command:%d\n",
-           lstEspeakCmd->u8EspeakCommand);
+        printf("gamepad -time:%u Espeak Command:%d\n",
+               u32TimeOfGamepadEventIn_us,
+               lstEspeakCmd->u8EspeakCommand);
 #endif
-    // open FIFO
-    if((pFileFIFIO = fopen(FIFO_CMD, "w")) == NULL) {
-        perror("gamepad:fopen FIFO_FILE");
-        exit(1);
-     }
-    // send the motion cmd
-    fwrite(lstEspeakCmd,sizeof(stEspeakCommand),1, pFileFIFIO);
+        // open FIFO
+        if((pFileFIFIO = fopen(FIFO_CMD, "w")) == NULL) {
+            perror("gamepad:fopen FIFO_FILE");
+            exit(1);
+        }
+        // send the motion cmd
+        fwrite(lstEspeakCmd,sizeof(stEspeakCommand),1, pFileFIFIO);
 
-    // close the FIFO
-    fclose(pFileFIFIO);
+        // close the FIFO
+        fclose(pFileFIFIO);
+    }
 }
-
 
 UI16 CalculatePWM(SI16 ls16JoystickX, SI16 ls16JoystickY, UI16 lu16MaxJoystickValue, UI16 lu16MaxPWM)
 {
@@ -170,65 +199,74 @@ void CalculateMotionCommandWithAnalogJoystickInfo(SI16 s16JoystickX , SI16 s16Jo
     UI16 u16PWM;
     FL32 f32DeltaCompass,f32DeltaCompassLimited;
 
-    u16PWM = CalculatePWM(s16JoystickX,s16JoystickY,32767,2499);
-    // calculate delta compass from 0° to 180° on the right side and from 0° to -180° on the left side
-    f32DeltaCompass = f32CalculateDeltaCompass(s16JoystickX,s16JoystickY,32767);
+    if((s16JoystickX !=0) || (s16JoystickY!=0))
+    {
+        u16PWM = CalculatePWM(s16JoystickX,s16JoystickY,32767,2499);
+        // calculate delta compass from 0° to 180° on the right side and from 0° to -180° on the left side
+        f32DeltaCompass = f32CalculateDeltaCompass(s16JoystickX,s16JoystickY,32767);
 #ifdef GAMEPAD_LOG
-    printf("X:%5.5d Y:%5.5d u16PWM:%4.4d f32DeltaCompass:%f ", s16JoystickX,s16JoystickY,u16PWM,f32DeltaCompass);
+        printf("X:%5.5d Y:%5.5d u16PWM:%4.4d f32DeltaCompass:%f ", s16JoystickX,s16JoystickY,u16PWM,f32DeltaCompass);
 #endif
-    //calculate motor order, PWM, and DeltaCompass
-    if((-90.0<=f32DeltaCompass) && (f32DeltaCompass<=90.0)) // front area
-    {
-        //limit delta compass   -90 °<= Delta Compass <=90 °
-        f32DeltaCompassLimited = f32LimitDeltaCompass(f32DeltaCompass);
-        if(f32DeltaCompass == f32DeltaCompassLimited)//not limited
+        //calculate motor order, PWM, and DeltaCompass
+        if((-90.0<=f32DeltaCompass) && (f32DeltaCompass<=90.0)) // front area
         {
-            pstMotionCmd->u8MotorCommand  = 1;
-            pstMotionCmd->u16PWMLevel = u16PWM;
-            pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
+            //limit delta compass   -90 °<= Delta Compass <=90 °
+            f32DeltaCompassLimited = f32LimitDeltaCompass(f32DeltaCompass);
+            if(f32DeltaCompass == f32DeltaCompassLimited)//not limited
+            {
+                pstMotionCmd->u8MotorCommand  = 1;
+                pstMotionCmd->u16PWMLevel = u16PWM;
+                pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
+            }
+            else
+            {
+                //do not modify the motor command, the joystick is in black area
+                pstMotionCmd->u16PWMLevel = u16PWM;
+               pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
+            }
+        }
+        else if((+90.0< f32DeltaCompass) && (f32DeltaCompass<=180.0)) //area 90 °< Delta Compass <= 180 °
+        {
+            f32DeltaCompass = -(180.0-f32DeltaCompass);
+            f32DeltaCompassLimited = f32LimitDeltaCompass(f32DeltaCompass);
+            if(f32DeltaCompass == f32DeltaCompassLimited) //delta compas not limited
+            {
+                pstMotionCmd->u8MotorCommand  = 3;
+                pstMotionCmd->u16PWMLevel = u16PWM;
+                pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
+            }
+            else
+            {
+                //do not modify the motor command, the joystick is in black area
+                pstMotionCmd->u16PWMLevel = u16PWM;
+                pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
+            }
+        }
+        else if((-180.0<=f32DeltaCompass) && (f32DeltaCompass<-90.0)) //area -180 °<= Delta Compass < -90 °
+        {
+            f32DeltaCompass = 180.0+f32DeltaCompass;
+            f32DeltaCompassLimited = f32LimitDeltaCompass(f32DeltaCompass);
+            if(f32DeltaCompass == f32DeltaCompassLimited) //not limited
+            {
+                pstMotionCmd->u8MotorCommand  = 3;
+                pstMotionCmd->u16PWMLevel = u16PWM;
+                pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
+            }
+            else
+            {
+                //do not modify the motor command, the joystick is in black area
+                pstMotionCmd->u16PWMLevel = u16PWM;
+                pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
+            }
         }
         else
         {
-            //do not modify the motor command, the joystick is in black area
-            pstMotionCmd->u16PWMLevel = u16PWM;
-            pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
+            pstMotionCmd->u8MotorCommand = 0;
+            pstMotionCmd->u16PWMLevel = 0;
+            pstMotionCmd->f32DeltaCompass = 0;
         }
     }
-    else if((+90.0< f32DeltaCompass) && (f32DeltaCompass<=180.0)) //area 90 °< Delta Compass <= 180 °
-    {
-        f32DeltaCompass = -(180.0-f32DeltaCompass);
-        f32DeltaCompassLimited = f32LimitDeltaCompass(f32DeltaCompass);
-        if(f32DeltaCompass == f32DeltaCompassLimited) //delta compas not limited
-        {
-            pstMotionCmd->u8MotorCommand  = 3;
-            pstMotionCmd->u16PWMLevel = u16PWM;
-            pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
-        }
-        else
-        {
-            //do not modify the motor command, the joystick is in black area
-            pstMotionCmd->u16PWMLevel = u16PWM;
-            pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
-        }
-    }
-    else if((-180.0<=f32DeltaCompass) && (f32DeltaCompass<-90.0)) //area -180 °<= Delta Compass < -90 °
-    {
-        f32DeltaCompass = 180.0+f32DeltaCompass;
-        f32DeltaCompassLimited = f32LimitDeltaCompass(f32DeltaCompass);
-        if(f32DeltaCompass == f32DeltaCompassLimited) //not limited
-        {
-            pstMotionCmd->u8MotorCommand  = 3;
-            pstMotionCmd->u16PWMLevel = u16PWM;
-            pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
-        }
-        else
-        {
-            //do not modify the motor command, the joystick is in black area
-          pstMotionCmd->u16PWMLevel = u16PWM;
-          pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
-        }
-    }
-    else
+    else /*x and y = 0*/
     {
         pstMotionCmd->u8MotorCommand = 0;
         pstMotionCmd->u16PWMLevel = 0;
@@ -242,7 +280,7 @@ void CalculateMotionCommandWithAnalogJoystickInfo(SI16 s16JoystickX , SI16 s16Jo
 #endif
 }
 
-static void ManageEventOfLeftDirectionalButton(void)
+static void ManageEventOfLeftDirectionalButton(UI32 u32TimeOfGamepadEventIn_us)
 {
     // release all direction buttons
     if     ((s16LeftDirectionalButtonX ==     0) && (s16LeftDirectionalButtonY == 0))
@@ -300,13 +338,13 @@ static void ManageEventOfLeftDirectionalButton(void)
     {
 
     }
-    SendMotionCommandThroughFIFO(&gstMotionCommand);
+    SendMotionCommandThroughFIFO(u32TimeOfGamepadEventIn_us,&gstMotionCommand);
 }
 
 /*
  * List of all functions called when a gamepad button changed his state
  */
-void ActionButton0(__u8 u8Number, SI16 s16Value)
+void ActionButton0(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 #ifdef GAMEPAD_LOG
     printf("gamepad - Boutton A\n");
@@ -314,11 +352,11 @@ void ActionButton0(__u8 u8Number, SI16 s16Value)
     if(s16Value == 1)
     {
         if(gstMotionCommand.u16PWMLevel <= (2449-10)) gstMotionCommand.u16PWMLevel+=10;
-        SendMotionCommandThroughFIFO(&gstMotionCommand);
+        SendMotionCommandThroughFIFO(u32TimeOfGamepadEventIn_us,&gstMotionCommand);
     }
 }
 
-void ActionButton1(__u8 u8Number, SI16 s16Value)
+void ActionButton1(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 #ifdef GAMEPAD_LOG
     printf("gamepad - Boutton B\n");
@@ -326,16 +364,16 @@ void ActionButton1(__u8 u8Number, SI16 s16Value)
     if(s16Value == 1)
     {
         if(gstMotionCommand.u16PWMLevel >= 10) gstMotionCommand.u16PWMLevel-=10;
-        SendMotionCommandThroughFIFO(&gstMotionCommand);
+        SendMotionCommandThroughFIFO(u32TimeOfGamepadEventIn_us,&gstMotionCommand);
     }
 }
 
-void ActionButton2(__u8 u8Number, SI16 s16Value)
+void ActionButton2(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 
 }
 
-void ActionButton3(__u8 u8Number, SI16 s16Value)
+void ActionButton3(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 #ifdef GAMEPAD_LOG
     printf("gamepad - Boutton X\n");
@@ -343,10 +381,10 @@ void ActionButton3(__u8 u8Number, SI16 s16Value)
     gstMotionCommand.u8MotorCommand = 0;
     gstMotionCommand.u16PWMLevel = 0;
     gstMotionCommand.f32DeltaCompass = 0.0;
-    SendMotionCommandThroughFIFO(&gstMotionCommand);
+    SendMotionCommandThroughFIFO(u32TimeOfGamepadEventIn_us,&gstMotionCommand);
 }
 
-void ActionButton4(__u8 u8Number, SI16 s16Value)
+void ActionButton4(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
   stEspeakCommand lstEspeakCmd = {3};
 #ifdef GAMEPAD_LOG
@@ -354,16 +392,16 @@ void ActionButton4(__u8 u8Number, SI16 s16Value)
 #endif
     if(s16Value == 1)
     {
-        SendEspeakCommandThroughFIFO(&lstEspeakCmd);
+        SendEspeakCommandThroughFIFO(u32TimeOfGamepadEventIn_us, &lstEspeakCmd);
     }
 }
 
-void ActionButton5(__u8 u8Number, SI16 s16Value)
+void ActionButton5(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 
 }
 
-void ActionButton6(__u8 u8Number, SI16 s16Value)
+void ActionButton6(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
     stEspeakCommand lstEspeakCmd = {1};
 #ifdef GAMEPAD_LOG
@@ -371,11 +409,11 @@ void ActionButton6(__u8 u8Number, SI16 s16Value)
 #endif
     if(s16Value == 1)
     {
-        SendEspeakCommandThroughFIFO(&lstEspeakCmd);
+        SendEspeakCommandThroughFIFO(u32TimeOfGamepadEventIn_us, &lstEspeakCmd);
     }
 }
 
-void ActionButton7(__u8 u8Number, SI16 s16Value)
+void ActionButton7(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
     stEspeakCommand lstEspeakCmd = {2};
 #ifdef GAMEPAD_LOG
@@ -383,109 +421,78 @@ void ActionButton7(__u8 u8Number, SI16 s16Value)
 #endif
     if(s16Value == 1)
     {
-        SendEspeakCommandThroughFIFO(&lstEspeakCmd);
+        SendEspeakCommandThroughFIFO(u32TimeOfGamepadEventIn_us,&lstEspeakCmd);
     }
 }
 
-void ActionButton8(__u8 u8Number, SI16 s16Value)
+void ActionButton8(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 #ifdef GAMEPAD_LOG
     printf("gamepad - Boutton L2\n");
 #endif
 }
 
-void ActionButton9(__u8 u8Number, SI16 s16Value)
+void ActionButton9(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 #ifdef GAMEPAD_LOG
     printf("Boutton R2\n");
 #endif
 }
 
-void ActionButton10(__u8 u8Number, SI16 s16Value)
+void ActionButton10(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 #ifdef GAMEPAD_LOG
     printf("gamepad - Boutton Select\n");
 #endif
 }
 
-void ActionButton11(__u8 u8Number, SI16 s16Value)
+void ActionButton11(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
-    int result;
 #ifdef GAMEPAD_LOG
     printf("gamepad - Boutton Start\n");
 #endif
-
-    if(s16Value == 1)
-    {
-        /* start robot application */
-        printf("start motion control\n");
-
-        /* create a pipe FIFO required for motion control*/
-        result = mknod (FIFO_FILE,S_IRUSR| S_IWUSR|S_IFIFO, 0);
-        if (result < 0) {
-            perror ("fifo_read:mknod");
-        }
-
-        /* create /dev/rfcomm0 device and call start motion control*/
-        system("rfcomm bind hci0  EC:FE:7E:13:CA:FE 1");
-        system("/media/linaro/DATA/Hikey/Hikey/motion_control/Debug/motion_control /dev/rfcomm0 &");
-
-        /* create a pipe FIFO required for voice control*/
-        result = mknod (FIFO_CMD,S_IRUSR| S_IWUSR|S_IFIFO, 0);
-        if (result < 0) {
-            perror ("fifo_read:mknod");
-        }
-
-        printf("start voice control\n");
-        system("/media/linaro/DATA/Hikey/Hikey/voice_control/Debug/voice_control &");
-    }
-    else if(s16Value == 0)
-    {
-        /* stop robot application */
-        //TODO
-    }
 }
 
-void ActionButton12(__u8 u8Number, SI16 s16Value)
+void ActionButton12(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 
 }
 
-void ActionButton13(__u8 u8Number, SI16 s16Value)
+void ActionButton13(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 #ifdef GAMEPAD_LOG
     printf("gamepad - Boutton L joystick\n");
 #endif
 }
 
-void ActionButton14(__u8 u8Number, SI16 s16Value)
+void ActionButton14(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 #ifdef GAMEPAD_LOG
     printf("gamepad - Boutton R joystick\n");
 #endif
 }
 
-void ActionButton15(__u8 u8Number, SI16 s16Value)
+void ActionButton15(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 
 }
 
-void ActionButton16(__u8 u8Number, SI16 s16Value)
+void ActionButton16(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 
 }
 
-void ActionButton17(__u8 u8Number, SI16 s16Value)
+void ActionButton17(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 
 }
 
-void ActionButton18(__u8 u8Number, SI16 s16Value)
+void ActionButton18(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 
 }
 
-void ActionButton19(__u8 u8Number, SI16 s16Value)
+void ActionButton19(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
 
 }
@@ -493,7 +500,7 @@ void ActionButton19(__u8 u8Number, SI16 s16Value)
 /*
  * List of all functions called when a gamepad axis changed his state
  */
-void ActionAxis0(__u8 u8Number, SI16 s16Value)
+void ActionAxis0(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
     s16LeftJoystickPositionX = s16Value;
 #ifdef GAMEPAD_LOG
@@ -501,7 +508,7 @@ void ActionAxis0(__u8 u8Number, SI16 s16Value)
 #endif
 }
 
-void ActionAxis1(__u8 u8Number, SI16 s16Value)
+void ActionAxis1(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
     s16LeftJoystickPositionY = -s16Value;
 #ifdef GAMEPAD_LOG
@@ -509,27 +516,27 @@ void ActionAxis1(__u8 u8Number, SI16 s16Value)
 #endif
 }
 
-void ActionAxis2(__u8 u8Number, SI16 s16Value)
+void ActionAxis2(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
     s16RightJoystickPositionX = s16Value;
 #ifdef GAMEPAD_LOG
     printf("gamepad - Right joystick x:%d y:%d\n",s16RightJoystickPositionX,s16RightJoystickPositionY);
 #endif
     CalculateMotionCommandWithAnalogJoystickInfo(s16RightJoystickPositionX,s16RightJoystickPositionY,&gstMotionCommand);
-    SendMotionCommandThroughFIFO(&gstMotionCommand);
+    SendMotionCommandThroughFIFO(u32TimeOfGamepadEventIn_us,&gstMotionCommand);
 }
 
-void ActionAxis3(__u8 u8Number, SI16 s16Value)
+void ActionAxis3(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
     s16RightJoystickPositionY = -s16Value;
 #ifdef GAMEPAD_LOG
     printf("gamepad - Right joystick x:%d y:%d\n",s16RightJoystickPositionX,s16RightJoystickPositionY);
 #endif
     CalculateMotionCommandWithAnalogJoystickInfo(s16RightJoystickPositionX,s16RightJoystickPositionY,&gstMotionCommand);
-    SendMotionCommandThroughFIFO(&gstMotionCommand);
+    SendMotionCommandThroughFIFO(u32TimeOfGamepadEventIn_us,&gstMotionCommand);
 }
 
-void ActionAxis4(__u8 u8Number, SI16 s16Value)
+void ActionAxis4(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
     s16Right2ButtonX = -s16Value;
 #ifdef GAMEPAD_LOG
@@ -537,7 +544,7 @@ void ActionAxis4(__u8 u8Number, SI16 s16Value)
 #endif
 }
 
-void ActionAxis5(__u8 u8Number, SI16 s16Value)
+void ActionAxis5(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
     s16Left2ButtonY = -s16Value;
 #ifdef GAMEPAD_LOG
@@ -545,22 +552,22 @@ void ActionAxis5(__u8 u8Number, SI16 s16Value)
 #endif
 }
 
-void ActionAxis6(__u8 u8Number, SI16 s16Value)
+void ActionAxis6(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
     s16LeftDirectionalButtonX = s16Value;
 #ifdef GAMEPAD_LOG
     printf("gamepad - Left directional button x:%d y:%d\n",s16LeftDirectionalButtonX,s16LeftDirectionalButtonY);
 #endif
-    ManageEventOfLeftDirectionalButton();
+    ManageEventOfLeftDirectionalButton(u32TimeOfGamepadEventIn_us);
 }
 
-void ActionAxis7(__u8 u8Number, SI16 s16Value)
+void ActionAxis7(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value)
 {
     s16LeftDirectionalButtonY = -s16Value;
 #ifdef GAMEPAD_LOG
     printf("gamepad - Left directional button x:%d y:%d\n",s16LeftDirectionalButtonX,s16LeftDirectionalButtonY);
 #endif
-    ManageEventOfLeftDirectionalButton();
+    ManageEventOfLeftDirectionalButton(u32TimeOfGamepadEventIn_us);
 }
 
 pfGamePadActionFunction pfGamePadButtonActionArray[19] =
@@ -610,17 +617,39 @@ int main()
     int num_of_buttons=0;
     int num_of_Version=0;
     int lReadStatus = sizeof(struct js_event);
+    int result;
 
     char *button=NULL;
     char name_of_joystick[80];
     struct js_event js;
 
-    /** wait gamepad */
-    while( ( joy_fd = open( JOY_DEV , O_RDONLY)) == -1 )
+    /*  wait gamepad */
+    while( ( joy_fd = open( GAMEPAD_DEV , O_RDONLY)) == -1 )
     {
         printf( "Couldn't open joystick\n" );
-        sleep(2);/* wait 2 s*/
+        sleep(1);/* wait 2 s*/
     }
+
+    /* start robot application */
+    printf("start motion control\n");
+
+    /* create a pipe FIFO required for motion control*/
+    result = mknod (FIFO_FILE,S_IRUSR| S_IWUSR|S_IFIFO, 0);
+    if (result < 0) {
+        perror ("fifo_read:mknod");
+    }
+    /* create /dev/rfcomm0 device and call start motion control*/
+    system("rfcomm bind hci0  EC:FE:7E:13:CA:FE 1");
+    system("/media/linaro/DATA/Hikey/Hikey/motion_control/Debug/motion_control /dev/rfcomm0 &");
+
+    /* create a pipe FIFO required for voice control*/
+    result = mknod (FIFO_CMD,S_IRUSR| S_IWUSR|S_IFIFO, 0);
+    if (result < 0) {
+        perror ("fifo_read:mknod");
+    }
+
+    printf("start voice control\n");
+    system("/media/linaro/DATA/Hikey/Hikey/voice_control/Debug/voice_control &");
 
     /* read gamepad description */
     ioctl( joy_fd, JSIOCGAXES, &num_of_axis );
@@ -665,11 +694,11 @@ printf("lReadStatus%d",lReadStatus);
                 {
                     case JS_EVENT_AXIS:
                         axis   [ js.number ] = js.value;
-                        //TODO add init function           pfGamePadAxisActionArray[ js.number ](js.number,js.value);
+                        //TODO add init function           pfGamePadAxisActionArray[ js.number ](js.time,js.number,js.value);
                         break;
                     case JS_EVENT_BUTTON:
                         button [ js.number ] = js.value;
-                        //TODO add init function           pfGamePadButtonActionArray[ js.number ](js.number,js.value);
+                        //TODO add init function           pfGamePadButtonActionArray[ js.number ](js.time,js.number,js.value);
                         break;
                 }
             }
@@ -681,11 +710,11 @@ printf("lReadStatus%d",lReadStatus);
                 {
                     case JS_EVENT_AXIS:
                         axis   [ js.number ] = js.value;
-                        pfGamePadAxisActionArray[ js.number ](js.number,js.value);
+                        pfGamePadAxisActionArray[ js.number ](js.time,js.number,js.value);
                         break;
                     case JS_EVENT_BUTTON:
                         button [ js.number ] = js.value;
-                        pfGamePadButtonActionArray[ js.number ](js.number,js.value);
+                        pfGamePadButtonActionArray[ js.number ](js.time,js.number,js.value);
                         break;
                 }
             }
