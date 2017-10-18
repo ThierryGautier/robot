@@ -43,20 +43,6 @@ sudo apt-get install bluez-tools
 
 -	open cv (open soucre vision stack)
 https://github.com/milq/milq/blob/master/scripts/bash/install-opencv.sh
-	# INSTALL OPENCV ON UBUNTU OR DEBIAN #
-	######################################
-	
-
-	# |         THIS SCRIPT IS TESTED CORRECTLY ON         |
-	# |----------------------------------------------------|
-	# | OS             | OpenCV       | Test | Last test   |
-	# |----------------|--------------|------|-------------|
-	# | Ubuntu 16.04.2 | OpenCV 3.2.0 | OK   | 20 May 2017 |
-	# | Debian 8.8     | OpenCV 3.2.0 | OK   | 20 May 2017 |
-	# | Debian 9.0     | OpenCV 3.2.0 | OK   | 25 Jun 2017 |
-	
-
-	# 1. KEEP UBUNTU OR DEBIAN UP TO DATE
 	
 sudo apt-get -y update
 #sudo apt-get -y upgrade
@@ -94,29 +80,27 @@ sudo apt-get install FFmpeg
 	
 	# 3. INSTALL THE LIBRARY (YOU CAN CHANGE '3.2.0' FOR THE LAST STABLE VERSION)
 sudo apt-get install -y unzip wget
-wget https://github.com/opencv/opencv/archive/3.2.0.zip
-unzip 3.2.0.zip
-wget -O opencv_contrib.zip https://github.com/Itseez/opencv_contrib/archive/3.2.0.zip
+wget https://github.com/opencv/opencv/archive/3.3.0.zip
+unzip 3.3.0.zip
+wget -O opencv_contrib.zip https://github.com/Itseez/opencv_contrib/archive/3.3.0.zip
 unzip opencv_contrib.zip
 
-
-#### TODO clarify opencv_contrib-3.2.0
-
-cd opencv-3.2.0
+cd opencv-3.3.0
 mkdir build
 cd build
-cmake -Wno-dev -D CMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=/usr/local -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-3.2.0/modules ../   >cmake_result.txt 
+cmake -Wno-dev -D CMAKE_BUILD_TYPE=RELEASE -DCMAKE_INSTALL_PREFIX=/usr/local -DOPENCV_EXTRA_MODULES_PATH=../../opencv_contrib-3.3.0/modules ../   >cmake_result.txt 
 
 make -j4
 sudo make install
 sudo ldconfig
 
+
 	# 4. EXECUTE SOME OPENCV EXAMPLES AND COMPILE A DEMONSTRATION
 
+	# project generated in C++ with eclipse add path of open cv librairy
+https://docs.opencv.org/trunk/d7/d16/tutorial_linux_eclipse.html
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
 
-//bluetooth
-
-http://www.96boards.org/documentation/ConsumerEdition/HiKey/Configuration/WirelessTIModule.md/
 
 //installer package hwpack
 //voir https://doc.ubuntu-fr.org/dpkg
@@ -131,7 +115,6 @@ sudo apt-get install libasound2
 sudo apt-get install libasound2-dev
 sudo apt-get install libasound2-doc
 //sudo apt-get install Alsa-base
-
 
 -	synthèse vocale
 //https://www.gnu.org/software/gnuspeech/
