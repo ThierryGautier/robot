@@ -15,27 +15,27 @@ BOOT-ROOTFS Reference platform 2016-06
 
 PACKAGES List of package required for the project
 -	eclipse
-//eclipse http://packages.ubuntu.com/search?keywords=eclipse
+ # eclipse http://packages.ubuntu.com/search?keywords=eclipse
 //IDE (gdb , compilation native OK)
-sudo apt-get install eclipse
-sudo apt-get install eclipse-cdt
-sudo apt-get install eclipse-cdt-autotools
-sudo apt-get install eclipse-anyedit
+sudo apt-get install -y eclipse
+sudo apt-get install -y eclipse-cdt
+sudo apt-get install -y eclipse-cdt-autotools
+sudo apt-get install -y eclipse-anyedit
+sudo apt-get install -y eclipse-egit
 
--	vlc (test audio-video)
+ # vlc (test audio-video)
 //outil audio et video pour tester com bluetooth ave BT1300 philips
 sudo apt-get install vlc
 
-//list hardwardsup
+ # list hardwardsup
 sudo apt-get install lshw
 
-//gestion disque partition permet de voir les partion de la flash emmc de la hikey board
+ # gestion disque partition permet de voir les partion de la flash emmc de la hikey board
 // permet de faire de disque image de la flash
 // https://packages.debian.org/fr/jessie/gnome-disk-utility
 sudo apt-get install gnome-disk-utility
--	bluethooth
 
-//bluethooth pour LX music
+ # bluethooth pour LX music
 sudo apt-get install xmms2 xmms2-plugin-*
 
 //bluethooth cmd:List of devices to get the MAC address of my device:bt-device -l
@@ -144,7 +144,6 @@ sudo chmod 777 /usr/bin/mbrola
 sudo apt-get install dos2unix
 linaro@linaro-alip:/usr/bin$ sudo dos2unix mbrola
 
-
 //install de langue française
 sudo mkdir /usr/share/mbrola 
 sudo mkdir /usr/share/mbrola/voices
@@ -155,40 +154,3 @@ sudo mv fr1/fr1 /usr/share/mbrola/voices/
 //test
 # echo "salut les amis, c'est Pobot" > exemple.txt
 # espeak -v mb/mb-fr1 -f exemple.txt | mbrola /usr/share/mbrola/voices/fr1 - - | aplay -r16000 -fS16
-
-
--	vision (stack de management vision)
-
-
-
-http://www.pyimagesearch.com/2015/10/26/how-to-install-opencv-3-on-raspbian-jessie
-
-sudo apt-get install build-essential git cmake pkg-config
-sudo apt-get install libjpeg-dev libtiff5-dev libjasper-dev libpng12-dev
-sudo apt-get install libavcodec-dev libavformat-dev libswscale-dev libv4l-dev
-sudo apt-get install libxvidcore-dev libx264-dev
-sudo apt-get install libgtk2.0-dev
-sudo apt-get install libatlas-base-dev gfortran
-sudo apt-get install python2.7-dev python3-dev
-
-
-Installing OpenCV 3 on Raspbian Jessie
-Shell
-1
-2
-3	$ cd ~
-$ wget -O opencv.zip https://github.com/Itseez/opencv/archive/3.0.0.zip
-$ unzip opencv.zip
-
-
-
-
-
-
-
-	$ cd ~/opencv-3.0.0/
-$ mkdir build
-$ cd build
-cmake -D CMAKE_BUILD_TYPE=RELEASE -D CMAKE_INSTALL_PREFIX=/usr/local -D INSTALL_C_EXAMPLES=ON -D OPENCV_EXTRA_MODULES_PATH=~/../opencv_contrib-3.0.0/modules ..
-
-
