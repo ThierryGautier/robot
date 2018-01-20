@@ -25,7 +25,7 @@
 /* project include */
 #include "stdtype.h"
 
-#define GAMEPAD_LOG ///used to log all gamepad events
+//#define GAMEPAD_LOG ///used to log all gamepad events
 
 #define GAMEPAD_DEV "/dev/input/js1"
 
@@ -87,7 +87,7 @@ static void SendMotionCommandThroughFIFO(UI32 u32TimeOfGamepadEventIn_us, stMoti
         u32PreviousTimeOfMotionCommandIn_us = u32TimeOfGamepadEventIn_us;
 
 #ifdef GAMEPAD_LOG
-        printf("gamepad -time:%u u8MotorCommand:%d u16PWMLevel:%d f32DeltaCompass:%f\n",
+        printf("gamepad -time:%lu u8MotorCommand:%d u16PWMLevel:%d f32DeltaCompass:%f\n",
                u32TimeOfGamepadEventIn_us,
                lstMotionCmd->u8MotorCommand,
                lstMotionCmd->u16PWMLevel,
@@ -119,7 +119,7 @@ static void SendEspeakCommandThroughFIFO(UI32 u32TimeOfGamepadEventIn_us, stEspe
         u32PreviousTimeOfVoiceCommandIn_us = u32TimeOfGamepadEventIn_us;
 
 #ifdef GAMEPAD_LOG
-        printf("gamepad -time:%u Espeak Command:%d\n",
+        printf("gamepad -time:%lu Espeak Command:%d\n",
                u32TimeOfGamepadEventIn_us,
                lstEspeakCmd->u8EspeakCommand);
 #endif
@@ -631,7 +631,7 @@ int main()
     }
 
     /* start robot application */
-    printf("start motion control\n");
+    printf("start robot application \n");
 
     /* create a pipe FIFO required for motion control*/
     result = mknod (FIFO_FILE,S_IRUSR| S_IWUSR|S_IFIFO, 0);
@@ -650,6 +650,10 @@ int main()
 
     printf("start voice control\n");
     system("/media/linaro/DATA/Hikey/Hikey/voice_control/Debug/voice_control &");
+
+
+    printf("start vision control\n");
+    //system("/media/linaro/DATA/Hikey/Hikey/vision_control/Debug/vision_control &");
 
     /* read gamepad description */
     ioctl( joy_fd, JSIOCGAXES, &num_of_axis );
@@ -676,7 +680,7 @@ int main()
     {
         /* wait a joystick event */
         lReadStatus = read(joy_fd, &js, sizeof(struct js_event));
-printf("lReadStatus%d",lReadStatus);
+
         /* joystick USB or bluetooth is OK */
         if(lReadStatus == sizeof(struct js_event))
         {
