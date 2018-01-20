@@ -5,10 +5,12 @@
 #include <sys/fcntl.h>
 #include <unistd.h>
 
+
 #include "stdtype.h"
+
 //warning printf reduce reactivity of the comunication
 //#define DEBUG_UART
-//#define DEBUG_UART
+
 #ifdef DEBUG_UART
 UI08 gu8Mode = 1;
 #endif
@@ -17,6 +19,8 @@ static 	int	fd;
 BOOL UART_bOpenDevice (char pcDeviceName[])
 {
   struct termios	termios_p;
+  int err;
+
   /* Ouverture de la liaison serie ex"/dev/rfcomm1" */
   fd=open(pcDeviceName,O_RDWR);
   if (fd == -1 )
@@ -29,7 +33,8 @@ BOOL UART_bOpenDevice (char pcDeviceName[])
     printf("the device is open\n");
   }
 
-  tcgetattr(fd, &termios_p);
+  err = tcgetattr(fd, &termios_p);
+  printf("tcgetattr -err: %x\n",err);
 
   /* mode RAW, pas de mode canonique, pas d'echo */
   termios_p.c_iflag = IGNBRK;
@@ -47,13 +52,21 @@ BOOL UART_bOpenDevice (char pcDeviceName[])
 
   /* 8 bits de données, pas de parité */
   termios_p.c_cflag &= ~(PARENB | CSIZE);
-  termios_p.c_cflag |= CS8;
+  termios_p.c_cflag |= (CS8|CSTOPB);
 
   /* Gestion des signaux modem */
   termios_p.c_cflag &= ~CLOCAL;
 
+  /* On passe la vitesse à 115200 */
+  err = cfsetospeed(&termios_p, B115200);
+  printf("cfsetospeed -err: %x\n",err);
+  err = cfsetispeed(&termios_p, B115200);
+  printf("cfsetispeed -err: %x\n",err);
+
   /*mise à jour config */
-  tcsetattr(fd, TCSANOW, &termios_p);
+  err = tcsetattr(fd, TCSANOW, &termios_p);
+  printf("tcsetattr -err: %x\n",err);
+
   /** no error */
   return TRUE;
 }
