@@ -3,6 +3,18 @@ hikey 96boards sources
 - The bluetooth directory is a C project used to communicate with FRDM_KV31 board through bluetooth rfcomm connection.
 - The joystick directory is a C project used to read gamepad information. The gamepad information drives robot.
 
+# Hikey partition table see https://github.com/96boards/l-loader
+- vrl
+- vrl_backup
+- mcuimage
+- fastboot
+- nvme
+- boot (grub+UEFI)
+- reserved (not used if debian)
+- cache (not used if debian)
+- system (rootfs of debian withy kernel)
+
+
 # Hikey external software
 BOOT-ROOTFS Reference platform 2016-06
 -	download Debian For Hikey and apply the procedure to update boot and rootfs 
