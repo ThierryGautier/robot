@@ -22,13 +22,16 @@
 #include <sys/fcntl.h>
 #include <sys/stat.h>
 
+ #include <sched.h>
+
 /* project include */
 #include "stdtype.h"
 #include "uart.h"
 #include "hdlc.h"
 
 //warning printf reduce reactivity of the comunication
-//#define DEBUG_APP_FRAME
+//#define DEBUG_RX_APP_FRAME
+//#define DEBUG_TX_APP_FRAME
 //#define DEBUG_MOTION_CMD
 
 #define FIFO_FILE  "/tmp/MotionControl.fifo" //FIFO used to exchange motion command
@@ -79,13 +82,6 @@ void* ThreadCOMRx(void *arg)
         UI08  au8Data[4];
     }Convert32Bits;
 
-    union
-    {
-        int16_t  s16Value;
-        UI16  u16Value;
-        UI08  au8Data[2];
-    }Convert16Bits;
-
     printf("arg:%s ",(char *)arg);
 
     /* try to open HDLC link on "/dev/rfcomm*" */
@@ -128,7 +124,7 @@ void* ThreadCOMRx(void *arg)
         if((bRxResult == TRUE) && (u8RxSize == 26))
         {
             //analyze the data of the frame
-#ifdef DEBUG_APP_FRAME
+#ifdef DEBUG_RX_APP_FRAME
             //print all data of the hdlc frame received
             printf("Frame received:");
 
@@ -141,7 +137,7 @@ void* ThreadCOMRx(void *arg)
             Convert32Bits.au8Data[1] = au8RxFrame[3];
             Convert32Bits.au8Data[2] = au8RxFrame[4];
             Convert32Bits.au8Data[3] = au8RxFrame[5];
-#ifdef DEBUG_APP_FRAME
+#ifdef DEBUG_RX_APP_FRAME
             printf("Gx:%10.6f ",Convert32Bits.f32Value);
 #endif
 
@@ -150,7 +146,7 @@ void* ThreadCOMRx(void *arg)
             Convert32Bits.au8Data[1] = au8RxFrame[7];
             Convert32Bits.au8Data[2] = au8RxFrame[8];
             Convert32Bits.au8Data[3] = au8RxFrame[9];
-#ifdef DEBUG_APP_FRAME
+#ifdef DEBUG_RX_APP_FRAME
             printf("Gy:%10.6f ",Convert32Bits.f32Value);
 #endif
 
@@ -159,7 +155,7 @@ void* ThreadCOMRx(void *arg)
             Convert32Bits.au8Data[1] = au8RxFrame[11];
             Convert32Bits.au8Data[2] = au8RxFrame[12];
             Convert32Bits.au8Data[3] = au8RxFrame[13];
-#ifdef DEBUG_APP_FRAME
+#ifdef DEBUG_RX_APP_FRAME
             printf("Gz:%10.6f ",Convert32Bits.f32Value);
 #endif
 
@@ -168,7 +164,7 @@ void* ThreadCOMRx(void *arg)
             Convert32Bits.au8Data[1] = au8RxFrame[15];
             Convert32Bits.au8Data[2] = au8RxFrame[16];
             Convert32Bits.au8Data[3] = au8RxFrame[17];
-#ifdef DEBUG_APP_FRAME
+#ifdef DEBUG_RX_APP_FRAME
             printf("Roll:%10.6f° ",Convert32Bits.f32Value);
 #endif
 
@@ -177,7 +173,7 @@ void* ThreadCOMRx(void *arg)
             Convert32Bits.au8Data[1] = au8RxFrame[19];
             Convert32Bits.au8Data[2] = au8RxFrame[20];
             Convert32Bits.au8Data[3] = au8RxFrame[21];
-#ifdef DEBUG_APP_FRAME
+#ifdef DEBUG_RX_APP_FRAME
             printf("Pitch:%10.6f° ",Convert32Bits.f32Value);
 #endif
 
@@ -187,8 +183,8 @@ void* ThreadCOMRx(void *arg)
             Convert32Bits.au8Data[2] = au8RxFrame[24];
             Convert32Bits.au8Data[3] = au8RxFrame[25];
             f32RxeCompass = Convert32Bits.f32Value;
-#ifdef DEBUG_APP_FRAME
-            printf("Compass:%10.6f°\n",Convert32Bits.f32Value);
+#ifdef DEBUG_RX_APP_FRAME
+            printf("RxeCompass:%10.6f°\n",Convert32Bits.f32Value);
 #endif
         }
     }
@@ -199,7 +195,6 @@ void* ThreadCOMRx(void *arg)
 void* ThreadCOMTx(void *arg)
 {
 
-    BOOL bTxfirstResult;
     FILE* pFileFIFIO;
     stMotionCommand lstMotionCmd = {0,0,0.0};
 
@@ -222,18 +217,6 @@ void* ThreadCOMTx(void *arg)
     {
         printf( "Wait initialization is done\n" );
         sleep(1);/* wait 1 s*/
-    }
-
-    /* send startup frame */
-    au8TxFrame[0] = 's';
-    u8TxSize = 1;
-
-    //send tx frame
-    printf( "send first tx frame to start com with FRDM-KV31,%x\n", bInitHDLCIsOK);
-    bTxfirstResult = HDLC_bPutFrame(&au8TxFrame[0], &u8TxSize);
-    if(bTxfirstResult!=TRUE)
-    {
-        printf("Error to put a frame\n");
     }
 
     /* hdlc communication loop */
@@ -261,21 +244,21 @@ void* ThreadCOMTx(void *arg)
         u16PWMLevel       = lstMotionCmd.u16PWMLevel;
         f32CompassCommand = CalculateNewCap(f32RxeCompass,lstMotionCmd.f32DeltaCompass);
 
-#ifdef DEBUG_APP_FRAME
+#ifdef DEBUG_TX_APP_FRAME
         //print all data of the hdlc frame transmit
         printf("Frame transmit:");
 #endif
         //send hdlc response:
         // - motor command
         au8TxFrame[0] = u8MotorCommand;
-#ifdef DEBUG_APP_FRAME
+#ifdef DEBUG_TX_APP_FRAME
         printf("motor cmd:%2.2x ",u8MotorCommand);
 #endif
         // -send PWM command from 0 to 2500
         Convert16Bits.u16Value = u16PWMLevel;
         au8TxFrame[1] = Convert16Bits.au8Data[0];
         au8TxFrame[2] = Convert16Bits.au8Data[1];
-#ifdef DEBUG_APP_FRAME
+#ifdef DEBUG_TX_APP_FRAME
         printf("PWM cmd:%3.3x ",u16PWMLevel);
 #endif
 
@@ -285,8 +268,8 @@ void* ThreadCOMTx(void *arg)
         au8TxFrame[4] = Convert32Bits.au8Data[1];
         au8TxFrame[5] = Convert32Bits.au8Data[2];
         au8TxFrame[6] = Convert32Bits.au8Data[3];
-#ifdef DEBUG_APP_FRAME
-        printf("compass:%f \n",Convert32Bits.f32Value);
+#ifdef DEBUG_TX_APP_FRAME
+        printf("f32RxeCompass:%f f32CompassCommand:%f \n",f32RxeCompass,f32CompassCommand);
 #endif
         u8TxSize = 7;
 

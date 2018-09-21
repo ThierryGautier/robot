@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include "stdtype.h"
 #include "hdlc.h"
 
@@ -74,8 +76,8 @@ static void HDLC_StateWaitSTX(UI08 pu8Char)
     }
     else
     {
-    HDLC_gstContext.u8RxState = U8_STATE_WAIT_FIRST_DLE;
-    UpdateDLLRxFrameErrorCounter(pu8Char,U8_STATE_WAIT_STX);
+        HDLC_gstContext.u8RxState = U8_STATE_WAIT_FIRST_DLE;
+        UpdateDLLRxFrameErrorCounter(pu8Char,U8_STATE_WAIT_STX);
     }
 }
 
