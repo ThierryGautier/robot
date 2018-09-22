@@ -34,7 +34,7 @@
 //#define DEBUG_TX_APP_FRAME
 //#define DEBUG_MOTION_CMD
 
-#define FIFO_FILE  "/tmp/MotionControl.fifo" //FIFO used to exchange motion command
+#define FIFO_FILE  "/tmp/InMotionControl.fifo" //FIFO used to exchange motion command
 
 typedef struct
 {
@@ -165,7 +165,7 @@ void* ThreadCOMRx(void *arg)
             Convert32Bits.au8Data[2] = au8RxFrame[16];
             Convert32Bits.au8Data[3] = au8RxFrame[17];
 #ifdef DEBUG_RX_APP_FRAME
-            printf("Roll:%10.6f° ",Convert32Bits.f32Value);
+            printf("Roll:%10.6f ",Convert32Bits.f32Value);
 #endif
 
             /* update pitch (deg) */
@@ -174,7 +174,7 @@ void* ThreadCOMRx(void *arg)
             Convert32Bits.au8Data[2] = au8RxFrame[20];
             Convert32Bits.au8Data[3] = au8RxFrame[21];
 #ifdef DEBUG_RX_APP_FRAME
-            printf("Pitch:%10.6f° ",Convert32Bits.f32Value);
+            printf("Pitch:%10.6f ",Convert32Bits.f32Value);
 #endif
 
             /* update compass (deg) */
@@ -184,7 +184,7 @@ void* ThreadCOMRx(void *arg)
             Convert32Bits.au8Data[3] = au8RxFrame[25];
             f32RxeCompass = Convert32Bits.f32Value;
 #ifdef DEBUG_RX_APP_FRAME
-            printf("RxeCompass:%10.6f°\n",Convert32Bits.f32Value);
+            printf("RxeCompass:%10.6f \n",Convert32Bits.f32Value);
 #endif
         }
     }
