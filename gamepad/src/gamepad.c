@@ -12,11 +12,13 @@
 #include <string.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <math.h>
 #include <sys/ioctl.h>
 #include <linux/joystick.h>
+
 
 /* system include */
 #include <sys/fcntl.h>
@@ -25,12 +27,7 @@
 /* project include */
 #include "stdtype.h"
 
-//#define GAMEPAD_LOG ///used to log all gamepad events
-
-#define GAMEPAD_DEV "/dev/input/js1"
-
-#define FIFO_FILE "/tmp/MotionControl.fifo" //FIFO used to exchange motion command
-#define FIFO_CMD  "/tmp/VoiceControl.fifo" //FIFO used to exchange sound command
+#define GAMEPAD_LOG ///used to log all gamepad events
 
 /* time min between two motion control command
    gamepad is able to generate an event at 10 ms
@@ -70,6 +67,10 @@ stMotionCommand gstMotionCommand = {0,0,0.0f};
 UI32 u32PreviousTimeOfMotionCommandIn_us = 0;
 UI32 u32PreviousTimeOfVoiceCommandIn_us = 0;
 
+char ucPathOfDevice[64];
+char ucPathOfInMotionControlFIFO[64];
+char ucPathOfInVoiceControlFIFO[64];
+
 typedef void (*pfGamePadActionFunction)(UI32 u32TimeOfGamepadEventIn_us, UI08 u8Number, SI16 s16Value);
 
 /*
@@ -94,7 +95,7 @@ static void SendMotionCommandThroughFIFO(UI32 u32TimeOfGamepadEventIn_us, stMoti
                lstMotionCmd->f32DeltaCompass);
 #endif
         // open FIFO
-        if((pFileFIFIO = fopen(FIFO_FILE, "w")) == NULL) {
+        if((pFileFIFIO = fopen(ucPathOfInMotionControlFIFO, "w")) == NULL) {
             perror("gamepad:fopen FIFO_FILE");
             exit(1);
          }
@@ -124,7 +125,7 @@ static void SendEspeakCommandThroughFIFO(UI32 u32TimeOfGamepadEventIn_us, stEspe
                lstEspeakCmd->u8EspeakCommand);
 #endif
         // open FIFO
-        if((pFileFIFIO = fopen(FIFO_CMD, "w")) == NULL) {
+        if((pFileFIFIO = fopen(ucPathOfInVoiceControlFIFO, "w")) == NULL) {
             perror("gamepad:fopen FIFO_FILE");
             exit(1);
         }
@@ -202,7 +203,7 @@ void CalculateMotionCommandWithAnalogJoystickInfo(SI16 s16JoystickX , SI16 s16Jo
     if((s16JoystickX !=0) || (s16JoystickY!=0))
     {
         u16PWM = CalculatePWM(s16JoystickX,s16JoystickY,32767,2499);
-        // calculate delta compass from 0° to 180° on the right side and from 0° to -180° on the left side
+        // calculate delta compass from 0 to 180 on the right side and from 0 to -180 on the left side
         f32DeltaCompass = f32CalculateDeltaCompass(s16JoystickX,s16JoystickY,32767);
 #ifdef GAMEPAD_LOG
         printf("X:%5.5d Y:%5.5d u16PWM:%4.4d f32DeltaCompass:%f ", s16JoystickX,s16JoystickY,u16PWM,f32DeltaCompass);
@@ -210,7 +211,7 @@ void CalculateMotionCommandWithAnalogJoystickInfo(SI16 s16JoystickX , SI16 s16Jo
         //calculate motor order, PWM, and DeltaCompass
         if((-90.0<=f32DeltaCompass) && (f32DeltaCompass<=90.0)) // front area
         {
-            //limit delta compass   -90 °<= Delta Compass <=90 °
+            //limit delta compass   -90 <= Delta Compass <=90
             f32DeltaCompassLimited = f32LimitDeltaCompass(f32DeltaCompass);
             if(f32DeltaCompass == f32DeltaCompassLimited)//not limited
             {
@@ -225,7 +226,7 @@ void CalculateMotionCommandWithAnalogJoystickInfo(SI16 s16JoystickX , SI16 s16Jo
                pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
             }
         }
-        else if((+90.0< f32DeltaCompass) && (f32DeltaCompass<=180.0)) //area 90 °< Delta Compass <= 180 °
+        else if((+90.0< f32DeltaCompass) && (f32DeltaCompass<=180.0)) //area 90 < Delta Compass <= 180
         {
             f32DeltaCompass = -(180.0-f32DeltaCompass);
             f32DeltaCompassLimited = f32LimitDeltaCompass(f32DeltaCompass);
@@ -242,7 +243,7 @@ void CalculateMotionCommandWithAnalogJoystickInfo(SI16 s16JoystickX , SI16 s16Jo
                 pstMotionCmd->f32DeltaCompass = f32DeltaCompassLimited;
             }
         }
-        else if((-180.0<=f32DeltaCompass) && (f32DeltaCompass<-90.0)) //area -180 °<= Delta Compass < -90 °
+        else if((-180.0<=f32DeltaCompass) && (f32DeltaCompass<-90.0)) //area -180 <= Delta Compass < -90
         {
             f32DeltaCompass = 180.0+f32DeltaCompass;
             f32DeltaCompassLimited = f32LimitDeltaCompass(f32DeltaCompass);
@@ -604,12 +605,27 @@ pfGamePadActionFunction pfGamePadAxisActionArray[8] =
   ActionAxis6,
   ActionAxis7
 };
+
+/* catch Signal to interrupt the gamepad process */
+void sig_handler(int signo)
+{
+  if (signo == SIGINT)
+  {
+    printf("received SIGINT\n");
+    exit(0);
+  }
+}
+
 /* processus in charge to:
- * - wait the detect the first gamepad connected
+ * - wait the detect the gamepad device specified by his path (arg 1)
  * - read gamepad description (name, number of buttons, numbers of axis..)
  * - in the infinite loop, the software call a user function for each game pad events
+ * - arg 0 path of process
+ * - arg 1 path of device (/dev/input/js1)
+ * - arg 2 path of FIFO used to send motion control command
+ * - arg 3 path of FIFO used to send voice control command
  */
-int main()
+int main(int argc, char *argv[])
 {
     int joy_fd;
     int *axis=NULL;
@@ -617,43 +633,38 @@ int main()
     int num_of_buttons=0;
     int num_of_Version=0;
     int lReadStatus = sizeof(struct js_event);
-    int result;
 
     char *button=NULL;
     char name_of_joystick[80];
     struct js_event js;
 
-    /*  wait gamepad */
-    while( ( joy_fd = open( GAMEPAD_DEV , O_RDONLY)) == -1 )
+    /* check arguments */
+    if(argc!=4)
     {
-        printf( "Couldn't open joystick\n" );
-        sleep(1);/* wait 2 s*/
+        printf("no enough arguments\n");
+        printf("1: path of device (/dev/input/js0)\n");
+        printf("2: path of FIFO used to send motion control command\n");
+        printf("3: path of FIFO used to send voice control command\n");
+        exit(-1);
     }
 
-    /* start robot application */
-    printf("start robot application \n");
+    /* *saved all parameters */
+    strncpy(ucPathOfDevice,argv[1],sizeof(ucPathOfDevice));
+    strncpy(ucPathOfInMotionControlFIFO,argv[2],sizeof(ucPathOfInMotionControlFIFO));
+    strncpy(ucPathOfInVoiceControlFIFO,argv[3],sizeof(ucPathOfInVoiceControlFIFO));
 
-    /* create a pipe FIFO required for motion control*/
-    result = mknod (FIFO_FILE,S_IRUSR| S_IWUSR|S_IFIFO, 0);
-    if (result < 0) {
-        perror ("fifo_read:mknod");
-    }
-    /* create /dev/rfcomm0 device and call start motion control*/
-    system("rfcomm bind hci0  EC:FE:7E:13:CA:FE 1");
-    system("/media/linaro/DATA/Hikey/Hikey/motion_control/Debug/motion_control /dev/rfcomm0 &");
-
-    /* create a pipe FIFO required for voice control*/
-    result = mknod (FIFO_CMD,S_IRUSR| S_IWUSR|S_IFIFO, 0);
-    if (result < 0) {
-        perror ("fifo_read:mknod");
+    /** catch SIGINT signal */
+    if (signal(SIGINT, sig_handler) == SIG_ERR)
+    {
+        printf("\ncan't catch SIGINT\n");
     }
 
-    printf("start voice control\n");
-    system("/media/linaro/DATA/Hikey/Hikey/voice_control/Debug/voice_control &");
-
-
-    printf("start vision control\n");
-    //system("/media/linaro/DATA/Hikey/Hikey/vision_control/Debug/vision_control &");
+    /*  wait gamepad */
+    while( ( joy_fd = open(ucPathOfDevice , O_RDONLY)) == -1 )
+    {
+        printf( "Couldn't open gamepad device: %s \n",argv[1] );
+        sleep(1);/* wait 1 s*/
+    }
 
     /* read gamepad description */
     ioctl( joy_fd, JSIOCGAXES, &num_of_axis );
@@ -667,7 +678,6 @@ int main()
             , num_of_Version
             , num_of_axis
             , num_of_buttons );
-
 
     /* allocate the buttons and axis required for this game pad */
     axis = (int *) calloc( num_of_axis, sizeof( int ) );

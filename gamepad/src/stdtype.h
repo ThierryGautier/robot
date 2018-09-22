@@ -7,6 +7,8 @@ typedef unsigned char  BOOL;
 #define TRUE  (BOOL)0x1U
 #define FALSE (BOOL)0x0U
 
+typedef unsigned char  CHAR;
+
 typedef unsigned char  UI08;
 typedef unsigned short UI16;
 typedef unsigned long  UI32;
