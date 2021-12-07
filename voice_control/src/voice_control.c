@@ -1,10 +1,10 @@
 /*
  ============================================================================
- Name        : control_espeak.c
+ Name        : voice_control.c
  Author      : GAUTIER
  Version     : 1.0
  Copyright   : Your copyright notice
- Description : Joystick control in C, Ansi-style
+ Description : voice command using espeak-ng in C, Ansi-style
  ============================================================================
  */
 
@@ -16,7 +16,7 @@
 
 #include "stdtype.h"
 
-#define FIFO_CMD  "/tmp/VoiceControl.fifo" //FIFO used to exchange sound command
+#define FIFO_CMD  "/tmp/InVoiceControl.fifo" //FIFO used to exchange sound command
 
 
 typedef struct
@@ -28,13 +28,13 @@ typedef struct
  * - wait an external comman reveived through a pipe
  * - generate the espeak command
  */
-int main()
+int main(int argc, char *argv[])
 {
     FILE* pFileFIFIO;
 
     stEspeakCommand lstEspeakCmd = {0};
 
-    system("aplay  /media/linaro/DATA/Hikey/Hikey/voice_control/parameter/voice0.wav &");
+    system("espeak-ng -v mb/mb-fr1 \"robot initialisation en cours\"");
 
     /* infinite loop */
     while( 1 )
@@ -51,13 +51,13 @@ int main()
         switch(lstEspeakCmd.u8EspeakCommand)
         {
             case   1:
-                system("aplay  /media/linaro/DATA/Hikey/Hikey/voice_control/parameter/klaxon.wav &");
+                system("aplay  /media/robot/DATA/robot/voice_control/parameter/klaxon.wav &");
                 break;
             case   2:
-                system("aplay  /media/linaro/DATA/Hikey/Hikey/voice_control/parameter/vache.wav &");
+                system("aplay  /media/robot/DATA/robot/voice_control/parameter/vache.wav &");
                 break;
             case   3:
-                system("aplay  /media/linaro/DATA/Hikey/Hikey/voice_control/parameter/voiture.wav &");
+                system("aplay  /media/robot/DATA/robot/voice_control/parameter/voiture.wav &");
                 break;
             case   4:
                 break;
